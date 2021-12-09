@@ -31,12 +31,13 @@ public class JapaneseResolverClient implements ClientModInitializer {
 			while (keyBinding.wasPressed()) {
 				String jpText = client.player.getMainHandStack().getName().getString();
 				client.player.sendMessage(new LiteralText("resolving " + jpText + "..."), false);
-				List<String> resolvedJapaneseParts = resolveJapanese(jpText);
-
-				for (String part : resolvedJapaneseParts) {
-					
-					client.player.sendMessage(new LiteralText(part), false);
-				}
+				new Thread(() -> {
+					List<String> resolvedJapaneseParts = resolveJapanese(jpText);
+					for (String part : resolvedJapaneseParts) {
+						
+						client.player.sendMessage(new LiteralText(part), false);
+					}
+				}).start();
 			}
 		});
 	}
@@ -54,7 +55,7 @@ public class JapaneseResolverClient implements ClientModInitializer {
 				String resolvedText = handleJishoEntry(jsonElement.getAsJsonObject());
 				parts.add(resolvedText);
 			}
-			return parts.subList(0, 4); // Only show 5 first results.
+			return parts.stream().limit(5).toList(); // Only show 5 first results.
 		} catch (Exception e) {
 			return List.of("Something went wrong");
 		}
