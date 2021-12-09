@@ -18,8 +18,4 @@ public class JapaneseResolver implements ModInitializer {
 		LOGGER.info("Hello Fabric world!");
 
 	}
-
-	private void resolve() {
-		
-	}
 }
