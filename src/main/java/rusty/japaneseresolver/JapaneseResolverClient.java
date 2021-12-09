@@ -14,8 +14,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import com.google.gson.*;
 
@@ -29,11 +31,11 @@ public class JapaneseResolverClient implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (keyBinding.wasPressed()) {
 				String jpText = client.player.getMainHandStack().getName().getString();
-				client.player.sendMessage(new LiteralText("resolving " + jpText + "..."), false);
+				client.player.sendMessage(new LiteralText(" "), false);
+				client.player.sendMessage(new LiteralText("Resolving " + jpText + "..."), false);
 				new Thread(() -> {
 					List<String> resolvedJapaneseParts = resolveJapanese(jpText);
 					for (String part : resolvedJapaneseParts) {
-						
 						client.player.sendMessage(new LiteralText(part), false);
 					}
 				}).start();
@@ -49,41 +51,62 @@ public class JapaneseResolverClient implements ClientModInitializer {
 
 			JsonArray jishoResponseData = topLevel.get("data").getAsJsonArray();
 			
-			List<String> parts = new ArrayList<String>();
-			for (JsonElement jsonElement : jishoResponseData) {
-				String resolvedText = handleJishoEntry(jsonElement.getAsJsonObject());
-				parts.add(resolvedText);
-			}
-			return parts.stream().limit(5).toList(); // Only show 5 first results.
+			Stream<JsonElement> responseStream = StreamSupport.stream(jishoResponseData.spliterator(), false);
+			// Only handles 3 first results.
+			List<String> resolvedEntries = responseStream.limit(3).map(je -> handleJishoEntry(je.getAsJsonObject())).toList();
+			return resolvedEntries;
 		} catch (Exception e) {
 			return List.of("Something went wrong");
 		}
 	}
 
 	private String handleJishoEntry(JsonObject entryObject) {
-		JsonObject japanese = entryObject.get("japanese").getAsJsonArray().get(0).getAsJsonObject();
 
-		String resolvedText = japanese.get("word").getAsString();
+		try {
+			JsonObject japanese = entryObject.get("japanese").getAsJsonArray().get(0).getAsJsonObject();
 
-		String reading = japanese.get("reading").getAsString();
+			Optional<String> word = Optional.empty();
+			if (japanese.has("word")) {
+				word = Optional.of(japanese.get("word").getAsString());
+			}
 
-		JsonArray senses = entryObject.get("senses").getAsJsonArray();
+			Optional<String> reading = Optional.empty();
+			if (japanese.has("reading")) {
+				reading = Optional.of(japanese.get("reading").getAsString());
+			}
 
-		JsonObject firstSense = senses.get(0).getAsJsonObject();
+			JishoEntry.JapaneseWord jWord = new JishoEntry.JapaneseWord(word, reading);
 
-		JsonArray meanings = firstSense.get("english_definitions").getAsJsonArray();
+			JsonArray senses = entryObject.get("senses").getAsJsonArray();
 
-		String firstMeaning = meanings.get(0).getAsString();
+			List<JishoEntry.Sense> sensesList = StreamSupport.stream(senses.spliterator(), false)
+				.limit(2) // first 2 senses
+				.map((JsonElement s) -> s.getAsJsonObject().get("english_definitions").getAsJsonArray())
+				.map(meanings -> 
+					StreamSupport.stream(meanings.spliterator(), false)
+					.limit(3) // first 3 meanings
+					.map(m -> m.getAsString())
+					.toList())
+				.map((List<String> ms) -> new JishoEntry.Sense(ms))
+				.toList();
 
-		return resolvedText + " => " + "reading: " + reading + " | meaning: " + firstMeaning;
+			JishoEntry entry = new JishoEntry(List.of(jWord), sensesList);
+
+			return entry.toString();
+		} catch (Exception e) {
+			return "Couldn't resolve entry";
+		}
 	}
 
 	private String queryJisho(String jpText) throws Exception{
+		String url = "https://jisho.org/api/v1/search/words?keyword=".concat(jpText);
 		HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://jisho.org/api/v1/search/words?keyword=".concat(jpText)))
+                .uri(URI.create(url))
                 .build();
+		JapaneseResolver.LOGGER.info("API request: " + url);
 		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+		// JapaneseResolver.LOGGER.info("Response: " + response.body());
 		return response.body();
 	}
 	
