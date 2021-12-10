@@ -3,7 +3,7 @@
 This mod resolves Japanese text.
 
 ## Example screenshots
-Jisho search on clay
+Normal resolve on clay
 ![alt text](https://github.com/MatRusTy/minecraft-japanese-resolver/blob/1.18/Examples/clay_example_jisho.png)
 
 Kanji resolve on clay
